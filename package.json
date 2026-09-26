@@ -1,0 +1,25 @@
+{
+  "name": "logseq-youtube-channel-linker",
+  "version": "0.1.0",
+  "description": "Auto-fills a channel property on #YoutubeVideo blocks by matching the video's channel against your saved #YoutubeChannel links — no YouTube API key required.",
+  "main": "dist/index.html",
+  "targets": {
+    "main": false
+  },
+  "default": "dist/index.html",
+  "scripts": {
+    "dev": "parcel ./index.html --public-url ./",
+    "build": "parcel build --public-url . --no-source-maps index.html"
+  },
+  "devDependencies": {
+    "@logseq/libs": "^0.0.17",
+    "parcel": "^2.12.0",
+    "typescript": "^5.4.0"
+  },
+  "logseq": {
+    "id": "logseq-youtube-channel-linker",
+    "main": "dist/index.html",
+    "title": "YouTube Channel Linker",
+    "effect": true
+  }
+}
