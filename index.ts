@@ -83,7 +83,13 @@ function extractChannelKey(url: string): { kind: 'id' | 'handle'; value: string 
 
 async function getProp(uuid: string, key: string): Promise<any> {
   const props = await logseq.Editor.getBlockProperties(uuid)
-  return props ? props[key] : undefined
+  if (!props) return undefined
+  // Plugin-created properties are stored under a namespaced ident
+  // (":plugin.property.<plugin-id>/<key>"), not the bare key passed to
+  // upsertProperty/upsertBlockProperty — getBlockProperties reflects that
+  // namespaced form, so a plain props[key] lookup silently always misses.
+  if (props[key] != null) return props[key]
+  return props[`plugin.property.${logseq.baseInfo.id}/${key}`]
 }
 
 /* ---------------------------------------------------------------------- */
@@ -203,6 +209,21 @@ async function findMatchingChannelBlock(videoAuthorUrl: string): Promise<BlockEn
 
 const processing = new Set<string>()
 
+// Belt-and-suspenders "already linked" guard. getBlockProperties doesn't
+// always reliably reflect a freshly-written node-type property back on the
+// very next read in every @logseq/libs version, and if that check silently
+// fails it turns into an infinite write -> onChanged -> write loop (each
+// write re-triggers DB.onChanged for the same block). Tracking linked
+// blocks in memory the moment we write them guarantees we never re-link the
+// same block twice in one running session, independent of whether the
+// persisted read-back is trustworthy.
+const linkedThisSession = new Set<string>()
+
+async function isAlreadyLinked(uuid: string, key: string): Promise<boolean> {
+  if (linkedThisSession.has(uuid)) return true
+  return (await getProp(uuid, key)) != null
+}
+
 async function processVideoBlock(block: BlockEntity): Promise<void> {
   if (processing.has(block.uuid)) return
   processing.add(block.uuid)
@@ -214,9 +235,8 @@ async function processVideoBlock(block: BlockEntity): Promise<void> {
     if (!videoId) return
 
     // Already linked — nothing to do.
-    const existing = await getProp(block.uuid, cfg.propertyKey)
-    if (existing) return
-
+    if (await isAlreadyLinked(block.uuid, cfg.propertyKey)) return
+    
     const oembed = await fetchOEmbed(videoId)
     if (!oembed?.author_url) return
 
@@ -224,6 +244,7 @@ async function processVideoBlock(block: BlockEntity): Promise<void> {
     if (!channelBlock) return
 
     await logseq.Editor.upsertBlockProperty(block.uuid, cfg.propertyKey, channelBlock.id)
+    linkedThisSession.add(block.uuid)
     await logseq.UI.showMsg(`Linked to ${oembed.author_name}`, 'success', { timeout: 2000 })
   } catch (e) {
     console.error('[yt-linker] failed to process block', block.uuid, e)
