@@ -89,29 +89,42 @@ async function getProp(uuid: string, key: string): Promise<any> {
 /* ---------------------------------------------------------------------- */
 /* Network: oEmbed lookup + canonical channel id resolution                */
 /* ---------------------------------------------------------------------- */
+/* Uses plain fetch() rather than logseq.Net — the latter isn't present in
+ * every published @logseq/libs version, while fetch works everywhere and
+ * YouTube's oEmbed endpoint is explicitly CORS-open for this exact use. */
+
+const oembedCache = new Map<string, { author_name: string; author_url: string } | null>()
+
+async function fetchOEmbed(videoId: string): Promise<{ author_name: string; author_url: string } | null> {
+  if (oembedCache.has(videoId)) return oembedCache.get(videoId)!
+
+  let result: { author_name: string; author_url: string } | null = null
+  try {
+    const res = await fetch(
+      `https://www.youtube.com/oembed?url=${encodeURIComponent(
+        `https://www.youtube.com/watch?v=${videoId}`
+      )}&format=json`
+    )
+    if (res.ok) result = await res.json()
+  } catch (e) {
+    console.warn('[yt-linker] oEmbed lookup failed for', videoId, e)
+  }
+
+  oembedCache.set(videoId, result)
+  return result
+}
 
 // handle -> resolved "UC..." id (or null if resolution failed), for this
 // running session only. Saved channels get their id cached persistently
 // on the block instead (see getSavedChannelId).
 const sessionChannelIdCache = new Map<string, string | null>()
 
-async function fetchOEmbed(videoId: string): Promise<{ author_name: string; author_url: string } | null> {
-  try {
-    return await logseq.Net.get<any>(
-      `https://www.youtube.com/oembed?url=${encodeURIComponent(
-        `https://www.youtube.com/watch?v=${videoId}`
-      )}&format=json`,
-      { responseType: 'json', cache: { ttl: 6 * 60 * 60 * 1000 } }
-    )
-  } catch (e) {
-    console.warn('[yt-linker] oEmbed lookup failed for', videoId, e)
-    return null
-  }
-}
-
 // Resolve any channel URL form down to a canonical "UC..." id. Cheap when
 // the URL already contains /channel/UC..., otherwise fetches the channel
-// page once and scrapes the id out of it.
+// page once and scrapes the id out of it. This one request is NOT on an
+// endpoint YouTube designed for cross-origin use, so it may fail under
+// CORS depending on your setup — callers should treat a null result as
+// "couldn't confirm", not as an error.
 async function resolveChannelId(url: string): Promise<string | null> {
   const key = extractChannelKey(url)
   if (!key) return null
@@ -123,12 +136,12 @@ async function resolveChannelId(url: string): Promise<string | null> {
 
   let resolved: string | null = null
   try {
-    const html = await logseq.Net.get<string>(`https://www.youtube.com/@${key.value}`, {
-      responseType: 'text',
-      cache: { ttl: 24 * 60 * 60 * 1000 },
-    })
-    const m = html.match(/"channelId":"(UC[\w-]{22})"/)
-    resolved = m ? m[1] : null
+    const res = await fetch(`https://www.youtube.com/@${key.value}`)
+    if (res.ok) {
+      const html = await res.text()
+      const m = html.match(/"channelId":"(UC[\w-]{22})"/)
+      resolved = m ? m[1] : null
+    }
   } catch (e) {
     console.warn('[yt-linker] channel id resolution failed for', key.value, e)
   }
@@ -158,11 +171,25 @@ async function findMatchingChannelBlock(videoAuthorUrl: string): Promise<BlockEn
   const savedChannels = (await logseq.Editor.getTagObjects(cfg.channelTag)) || []
   if (!savedChannels.length) return null
 
+  const videoKey = extractChannelKey(videoAuthorUrl)
+  if (!videoKey) return null
+
+  // Cheap pass first: direct string match (handle-to-handle or id-to-id),
+  // no network involved. Covers the common case where both sides already
+  // use the same URL form.
+  for (const channelBlock of savedChannels) {
+    const text = channelBlock.title || channelBlock.content || ''
+    const key = extractChannelKey(text)
+    if (key && key.kind === videoKey.kind && key.value === videoKey.value) {
+      return channelBlock
+    }
+  }
+
+  // Fallback: resolve both sides to a canonical channel id, so an @handle
+  // saved one way still matches a /channel/UC... form (or vice versa).
   const videoChannelId = await resolveChannelId(videoAuthorUrl)
   if (!videoChannelId) return null
 
-  // Sequential on purpose: avoids hammering YouTube with a burst of
-  // concurrent requests the first time a batch of channels is resolved.
   for (const channelBlock of savedChannels) {
     const id = await getSavedChannelId(channelBlock)
     if (id && id === videoChannelId) return channelBlock
