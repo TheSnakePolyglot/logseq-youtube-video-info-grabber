@@ -382,6 +382,7 @@ function scheduleProcessing(uuid: string): void {
 
     for (const uuid of uuids) {
       if (await blockHasVideoTag(uuid)) {
+        console.log("Block has Youtube video tag (or descendant)")
         const block = await logseq.Editor.getBlock(uuid)
         if (block) await processVideoBlock(block)
       }
@@ -463,6 +464,9 @@ async function main(): Promise<void> {
     offChanged()
     if (debounceTimer) clearTimeout(debounceTimer)
   })
+
+  console.log(`Finished loading plugin ${logseq.baseInfo.id} with the following tags for Youtube videos: ${videoTagIds}`)
 }
+
 
 logseq.ready(main).catch(console.error)
