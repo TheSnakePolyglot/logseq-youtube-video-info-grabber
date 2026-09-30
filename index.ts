@@ -236,7 +236,7 @@ async function processVideoBlock(block: BlockEntity): Promise<void> {
 
     // Already linked — nothing to do.
     if (await isAlreadyLinked(block.uuid, cfg.propertyKey)) return
-    
+
     const oembed = await fetchOEmbed(videoId)
     if (!oembed?.author_url) return
 
@@ -280,6 +280,91 @@ async function ensureSchema(): Promise<void> {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Tag hierarchy: also match child tags that extend the video tag          */
+/* ---------------------------------------------------------------------- */
+/* A block tagged with e.g. "#Funny Youtube Vid" should be treated as a
+ * video block too, as long as that tag extends the configured video tag.
+ * The full set of video-tag-or-descendant ids is computed ONCE at plugin
+ * startup and cached here — a tag created/extended afterward won't be
+ * picked up until Logseq (the plugin) is reloaded. That trade-off is
+ * intentional: it turns every check during normal editing into a plain
+ * Set lookup instead of a live graph walk. ensureSchema() still only ever
+ * attaches the property to the root video tag — children inherit it, so
+ * they're deliberately never touched there. */
+
+let videoTagIds = new Set<number>()
+
+async function getRootVideoTagId(): Promise<number | null> {
+  const cfg = getSettings()
+  const tag = await logseq.Editor.getTag(cfg.videoTag)
+  return tag ? tag.id : null
+}
+
+async function getTagChildIds(tagId: number): Promise<number[]> {
+  const query = `
+    [:find [?child ...]
+     :where
+     [?child :logseq.property.class/extends ${tagId}]]
+  `
+  return (await logseq.DB.datascriptQuery<number[]>(query)) || []
+}
+
+async function getBlockTagIds(blockUuid: string): Promise<number[]> {
+  const query = `
+    [:find [?tag ...]
+     :where
+     [?b :block/uuid #uuid "${blockUuid}"]
+     [?b :block/tags ?tag]]
+  `
+  return (await logseq.DB.datascriptQuery<number[]>(query)) || []
+}
+
+// Walks DOWN from the root video tag once, breadth-first, collecting every
+// descendant tag id (root included). Called only at startup.
+async function computeVideoTagIds(): Promise<Set<number>> {
+  const rootId = await getRootVideoTagId()
+  if (rootId == null) return new Set()
+
+  const ids = new Set<number>([rootId])
+  let frontier = [rootId]
+  let depth = 0
+
+  while (frontier.length && depth < 20) {
+    depth++
+    const nextFrontier: number[] = []
+    for (const tagId of frontier) {
+      const children = await getTagChildIds(tagId)
+      for (const childId of children) {
+        if (!ids.has(childId)) {
+          ids.add(childId)
+          nextFrontier.push(childId)
+        }
+      }
+    }
+    frontier = nextFrontier
+  }
+  return ids
+}
+
+async function blockHasVideoTag(blockUuid: string): Promise<boolean> {
+  if (!videoTagIds.size) return false
+  const tagIds = await getBlockTagIds(blockUuid)
+  return tagIds.some((id) => videoTagIds.has(id))
+}
+
+async function findAllVideoLikeBlocks(): Promise<BlockEntity[]> {
+  if (!videoTagIds.size) return []
+  const idsLiteral = Array.from(videoTagIds).join(' ')
+  const query = `
+    [:find [(pull ?b [*]) ...]
+     :where
+     [?b :block/tags ?tag]
+     [(contains? #{${idsLiteral}} ?tag)]]
+  `
+  return (await logseq.DB.datascriptQuery<BlockEntity[]>(query)) || []
+}
+
+/* ---------------------------------------------------------------------- */
 /* Debounced change watcher                                                */
 /* ---------------------------------------------------------------------- */
 
@@ -295,13 +380,11 @@ function scheduleProcessing(uuid: string): void {
     pendingUuids = new Set()
     debounceTimer = null
 
-    const cfg = getSettings()
-    const videoBlocks = (await logseq.Editor.getTagObjects(cfg.videoTag)) || []
-    const videoBlockByUuid = new Map(videoBlocks.map((b) => [b.uuid, b]))
-
     for (const uuid of uuids) {
-      const block = videoBlockByUuid.get(uuid)
-      if (block) await processVideoBlock(block)
+      if (await blockHasVideoTag(uuid)) {
+        const block = await logseq.Editor.getBlock(uuid)
+        if (block) await processVideoBlock(block)
+      }
     }
   }, 800)
 }
@@ -323,8 +406,15 @@ function registerCommands(): void {
   // Bulk pass over every currently-tagged video block — handy right after
   // installing the plugin, or after bulk-importing videos/channels.
   logseq.Editor.registerSlashCommand('Rescan YouTube videos', async () => {
-    const cfg = getSettings()
-    const videoBlocks = (await logseq.Editor.getTagObjects(cfg.videoTag)) || []
+    if (!videoTagIds.size) {
+      await logseq.UI.showMsg(
+        'Video tag not found — check the plugin settings, then reload the plugin.',
+        'warning'
+      )
+      return
+    }
+
+    const videoBlocks = await findAllVideoLikeBlocks()
     const tip = await logseq.UI.showMsg(`Scanning ${videoBlocks.length} video(s)…`, 'info', {
       timeout: 0,
     })
@@ -355,6 +445,15 @@ async function main(): Promise<void> {
 
   await ensureSchema()
   registerCommands()
+
+  videoTagIds = await computeVideoTagIds()
+  if (!videoTagIds.size) {
+    const cfg = getSettings()
+    await logseq.UI.showMsg(
+      `Video tag "${cfg.videoTag}" wasn't found — create it (and any child tags you want), then reload the plugin.`,
+      'warning'
+    )
+  }
 
   const offChanged = logseq.DB.onChanged(({ blocks }) => {
     for (const b of blocks) scheduleProcessing(b.uuid)
