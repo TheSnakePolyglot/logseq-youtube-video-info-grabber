@@ -172,7 +172,7 @@ async function main(): Promise<void> {
     if (debounceTimer) clearTimeout(debounceTimer)
   })
 
-   console.log(`[yt-vid-info] finished loading plugin with the following tag ids for Youtube videos: ${Array.from(
+   console.info(`[yt-vid-info] finished loading plugin with the following tag ids for Youtube videos: ${Array.from(
       videoTagIds
     ).join(', ')}`)
 
