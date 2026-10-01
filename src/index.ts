@@ -172,11 +172,11 @@ async function main(): Promise<void> {
     if (debounceTimer) clearTimeout(debounceTimer)
   })
 
-  console.log(
-    `[yt-vid-info] finished loading plugin with the following tag ids for Youtube videos: ${Array.from(
+   console.log(`[yt-vid-info] finished loading plugin with the following tag ids for Youtube videos: ${Array.from(
       videoTagIds
-    ).join(', ')}`
-  )
+    ).join(', ')}`)
+
+    await logseq.UI.showMsg(`Youtube Video Info Grabber - Finished loading plugin`, 'success', { timeout : 2800 })
 }
 
 logseq.ready(main).catch(console.error)

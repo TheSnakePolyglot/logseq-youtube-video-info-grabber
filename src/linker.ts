@@ -93,7 +93,7 @@ export async function processVideoBlock(block: BlockEntity): Promise<void> {
 
     await logseq.Editor.upsertBlockProperty(block.uuid, cfg.propertyKey, channelBlock.id)
     linkedThisSession.add(block.uuid)
-    await logseq.UI.showMsg(`Linked to ${oembed.author_name}`, 'success', { timeout: 2000 })
+    console.log(`[yt-vid-info] linked to '${oembed.author_name}'`)
   } catch (e) {
     console.error('[yt-vid-info] failed to process block', block.uuid, e)
   } finally {
