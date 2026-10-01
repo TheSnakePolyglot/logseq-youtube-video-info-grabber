@@ -2,7 +2,7 @@ import '@logseq/libs'
 import type { BlockEntity } from '@logseq/libs/dist/LSPlugin'
 
 /**
- * YouTube Channel Linker
+ * YouTube Video Info
  * ----------------------
  * When a block is tagged with the "video tag" and contains a YouTube video
  * link, this plugin looks up which channel posted the video (via YouTube's
@@ -113,7 +113,7 @@ async function fetchOEmbed(videoId: string): Promise<{ author_name: string; auth
     )
     if (res.ok) result = await res.json()
   } catch (e) {
-    console.warn('[yt-linker] oEmbed lookup failed for', videoId, e)
+    console.warn('[yt-vid-info] oEmbed lookup failed for', videoId, e)
   }
 
   oembedCache.set(videoId, result)
@@ -149,7 +149,7 @@ async function resolveChannelId(url: string): Promise<string | null> {
       resolved = m ? m[1] : null
     }
   } catch (e) {
-    console.warn('[yt-linker] channel id resolution failed for', key.value, e)
+    console.warn('[yt-vid-info] channel id resolution failed for', key.value, e)
   }
 
   sessionChannelIdCache.set(key.value, resolved)
@@ -247,7 +247,7 @@ async function processVideoBlock(block: BlockEntity): Promise<void> {
     linkedThisSession.add(block.uuid)
     await logseq.UI.showMsg(`Linked to ${oembed.author_name}`, 'success', { timeout: 2000 })
   } catch (e) {
-    console.error('[yt-linker] failed to process block', block.uuid, e)
+    console.error('[yt-vid-info] failed to process block', block.uuid, e)
   } finally {
     processing.delete(block.uuid)
   }
@@ -455,7 +455,7 @@ async function withRetry<T>(
       lastErr = e
       if (attempt > retries) break
       console.warn(
-        `[yt-linker] setup attempt ${attempt} failed (graph may still be loading), retrying in ${delayMs}ms`,
+        `[yt-vid-info] setup attempt ${attempt} failed (graph may still be loading), retrying in ${delayMs}ms`,
         e
       )
       await new Promise((r) => setTimeout(r, delayMs))
@@ -488,7 +488,7 @@ async function main(): Promise<void> {
       videoTagIds = await computeVideoTagIds()
     })
   } catch (e) {
-    console.error('[yt-linker] setup failed after retries — graph may not be ready', e)
+    console.error('[yt-vid-info] setup failed after retries — graph may not be ready', e)
     await logseq.UI.showMsg(
       'YouTube Channel Linker failed to start — try reloading the plugin from the Plugins page.',
       'error'
@@ -513,7 +513,7 @@ async function main(): Promise<void> {
     if (debounceTimer) clearTimeout(debounceTimer)
   })
 
-  console.log(`[yt-linker] finished loading plugin with the following tag ids for Youtube videos: ${Array.from(videoTagIds).join(', ')}`)
+  console.log(`[yt-vid-info] finished loading plugin with the following tag ids for Youtube videos: ${Array.from(videoTagIds).join(', ')}`)
 }
 
 logseq.ready(main).catch(console.error)

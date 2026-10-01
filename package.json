@@ -1,7 +1,7 @@
 {
-  "name": "logseq-youtube-channel-linker",
+  "name": "logseq-youtube-video-info-grab",
   "version": "0.1.0",
-  "description": "Auto-fills a channel property on #YoutubeVideo blocks by matching the video's channel against your saved #YoutubeChannel links — no YouTube API key required.",
+  "description": "Grabs some information about a YouTube video and stores it in your graph, like storing a channel property on #YoutubeVideo blocks by matching the video's channel against your saved #YoutubeChannel links — no YouTube API key required.",
   "main": "dist/index.html",
   "targets": {
     "main": false
@@ -17,9 +17,9 @@
     "typescript": "^5.4.0"
   },
   "logseq": {
-    "id": "logseq-youtube-channel-linker",
+    "id": "logseq-youtube-video-info-grab",
     "main": "dist/index.html",
-    "title": "YouTube Channel Linker",
+    "title": "YouTube Video Info Grabber",
     "effect": true
   }
 }
