@@ -1,4 +1,4 @@
-# YouTube Channel Linker
+# YouTube Video Info Grabber
 
 Auto-fills a channel property on `#YoutubeVideo` blocks by matching the
 video's uploader against your saved `#YoutubeChannel` links — **no YouTube
