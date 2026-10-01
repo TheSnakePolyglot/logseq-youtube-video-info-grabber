@@ -472,7 +472,7 @@ async function main(): Promise<void> {
   const isDbGraph = await logseq.App.checkCurrentIsDbGraph()
   if (!isDbGraph) {
     await logseq.UI.showMsg(
-      'YouTube Channel Linker needs a DB graph — the property APIs it relies on are DB-only.',
+      'YouTube Video Info Grabber needs a DB graph — the property APIs it relies on are DB-only.',
       'warning'
     )
     return
@@ -490,7 +490,7 @@ async function main(): Promise<void> {
   } catch (e) {
     console.error('[yt-vid-info] setup failed after retries — graph may not be ready', e)
     await logseq.UI.showMsg(
-      'YouTube Channel Linker failed to start — try reloading the plugin from the Plugins page.',
+      'YouTube Video Info Grabber failed to start — try reloading the plugin from the Plugins page.',
       'error'
     )
     return

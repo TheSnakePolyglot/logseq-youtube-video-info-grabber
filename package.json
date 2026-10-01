@@ -1,5 +1,5 @@
 {
-  "name": "logseq-youtube-video-info-grab",
+  "name": "logseq-youtube-video-info-grabber",
   "version": "0.1.0",
   "description": "Grabs some information about a YouTube video and stores it in your graph, like storing a channel property on #YoutubeVideo blocks by matching the video's channel against your saved #YoutubeChannel links — no YouTube API key required.",
   "main": "dist/index.html",
@@ -17,7 +17,7 @@
     "typescript": "^5.4.0"
   },
   "logseq": {
-    "id": "logseq-youtube-video-info-grab",
+    "id": "logseq-youtube-video-info-grabber",
     "main": "dist/index.html",
     "title": "YouTube Video Info Grabber",
     "effect": true
