@@ -382,7 +382,6 @@ function scheduleProcessing(uuid: string): void {
 
     for (const uuid of uuids) {
       if (await blockHasVideoTag(uuid)) {
-        console.log("Block has Youtube video tag (or descendant)")
         const block = await logseq.Editor.getBlock(uuid)
         if (block) await processVideoBlock(block)
       }
@@ -431,6 +430,41 @@ function registerCommands(): void {
 }
 
 /* ---------------------------------------------------------------------- */
+/* Startup retry                                                            */
+/* ---------------------------------------------------------------------- */
+/* logseq.ready(main) only guarantees the plugin<->host handshake is done —
+ * it does NOT guarantee the graph has finished loading/indexing yet. On a
+ * cold Logseq startup, DB-mutating calls like upsertProperty can go out
+ * before the host is able to service them, and just sit unanswered until
+ * the SDK's own 10s RPC timeout fires ("[deferred timeout] async call #n").
+ * A manual plugin reload never hits this because the graph is already
+ * loaded by then. Retrying with a short delay covers the cold-start case
+ * without any special-casing, since ensureSchema/computeVideoTagIds are
+ * both safe to redo from scratch (upsertProperty and addTagProperty are
+ * idempotent; recomputing the tag cache has no side effects). */
+
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  { retries = 5, delayMs = 3000 }: { retries?: number; delayMs?: number } = {}
+): Promise<T> {
+  let lastErr: unknown
+  for (let attempt = 1; attempt <= retries + 1; attempt++) {
+    try {
+      return await fn()
+    } catch (e) {
+      lastErr = e
+      if (attempt > retries) break
+      console.warn(
+        `[yt-linker] setup attempt ${attempt} failed (graph may still be loading), retrying in ${delayMs}ms`,
+        e
+      )
+      await new Promise((r) => setTimeout(r, delayMs))
+    }
+  }
+  throw lastErr
+}
+
+/* ---------------------------------------------------------------------- */
 /* Main                                                                     */
 /* ---------------------------------------------------------------------- */
 
@@ -444,10 +478,24 @@ async function main(): Promise<void> {
     return
   }
 
-  await ensureSchema()
+  // Registering commands is fire-and-forget on the SDK side (no RPC
+  // timeout risk), so it's safe to do before the graph is confirmed ready.
   registerCommands()
 
-  videoTagIds = await computeVideoTagIds()
+  try {
+    await withRetry(async () => {
+      await ensureSchema()
+      videoTagIds = await computeVideoTagIds()
+    })
+  } catch (e) {
+    console.error('[yt-linker] setup failed after retries — graph may not be ready', e)
+    await logseq.UI.showMsg(
+      'YouTube Channel Linker failed to start — try reloading the plugin from the Plugins page.',
+      'error'
+    )
+    return
+  }
+
   if (!videoTagIds.size) {
     const cfg = getSettings()
     await logseq.UI.showMsg(
@@ -465,8 +513,7 @@ async function main(): Promise<void> {
     if (debounceTimer) clearTimeout(debounceTimer)
   })
 
-  console.log(`Finished loading plugin ${logseq.baseInfo.id} with the following tags for Youtube videos: ${videoTagIds}`)
+  console.log(`[yt-linker] finished loading plugin with the following tag ids for Youtube videos: ${Array.from(videoTagIds).join(', ')}`)
 }
-
 
 logseq.ready(main).catch(console.error)
