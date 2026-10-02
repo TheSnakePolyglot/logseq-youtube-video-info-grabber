@@ -163,8 +163,28 @@ async function main(): Promise<void> {
     )
   }
 
-  const offChanged = logseq.DB.onChanged(({ blocks }) => {
-    for (const b of blocks) scheduleProcessing(b.uuid)
+  const offChanged = logseq.DB.onChanged(({ blocks , txData}) => {
+
+    /* txData is an Array of Arrays of the form 
+    [block-db-id, 
+    DB thing it changes (like block/tags, block/refs, block/updated-at),
+    the value thats changing it to,
+    tx-id,
+    true / false (depending on if its setting or deleting a value)]
+    The last Arrays (unknown amount, usually 2 per tx) are always changing block/tx-id
+    */
+    for (const tx of txData) {
+      let txColumn = tx[1]
+      let txAdd = tx[4]
+      if (txColumn == "block/tx-id") {
+        console.log("[yt-vid-info] user didnt set a tag")
+        return}
+      if (txColumn == "block/tags" && txAdd) {
+        console.log("[yt-vid-info] will process video")
+        break}
+    }
+
+    for (const b of blocks) {scheduleProcessing(b.uuid)}
   })
 
   logseq.beforeunload(async () => {
