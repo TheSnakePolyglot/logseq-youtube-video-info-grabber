@@ -175,12 +175,12 @@ async function main(): Promise<void> {
     */
     for (const tx of txData) {
       let txColumn = tx[1]
+      let txValue = tx[2]
       let txAdd = tx[4]
       if (txColumn == "block/tx-id") {
-        console.log("[yt-vid-info] user didnt set a tag")
         return}
-      if (txColumn == "block/tags" && txAdd) {
-        console.log("[yt-vid-info] will process video")
+      if (txColumn == "block/tags" && txAdd && videoTagIds.has(txValue)) {
+        console.log("[yt-vid-info] user just set a YouTube video tag somewhere, will try to process video")
         break}
     }
 
