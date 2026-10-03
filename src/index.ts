@@ -4,7 +4,6 @@ import { getSettings } from './settings'
 import {
   ensureSchema,
   computeVideoTagIds,
-  blockHasVideoTag,
   findAllVideoLikeBlocks,
   videoTagIds,
 } from './graph'
@@ -40,10 +39,8 @@ function scheduleProcessing(uuid: string): void {
     debounceTimer = null
 
     for (const uuid of uuids) {
-      if (await blockHasVideoTag(uuid)) {
         const block = await logseq.Editor.getBlock(uuid)
         if (block) await processVideoBlock(block)
-      }
     }
   }, 800)
 }
@@ -165,7 +162,26 @@ async function main(): Promise<void> {
 
   const offChanged = logseq.DB.onChanged(({ blocks , txData}) => {
 
-    /* txData is an Array of Arrays of the form 
+
+    /* 'blocks' is an Array of structs with the following keys (and example values)
+    uuid ("6abfb2ea-8021-4ba4-99d1-1f7d5f5cdeb3")
+    id (302)
+    createdAt (1790783482084)
+    updatedAt (1790948078344)
+    txId (536872845)
+    refs (Array of structs with single key 'id', like [{id: 4}, {id: 21}])
+    tags (Array of structs with single key 'id', like [{id: 4}] )
+    - if block:
+      title 
+      order ("a00001")
+      page (struct with single key 'id')
+    - if page:
+      name
+    - if namespaced:
+      parent (struct with single key 'id')
+
+
+    /* 'txData' is an Array of Arrays of the form 
     [block-db-id, 
     DB thing it changes (like block/tags, block/refs, block/updated-at),
     the value thats changing it to,
@@ -173,18 +189,44 @@ async function main(): Promise<void> {
     true / false (depending on if its setting or deleting a value)]
     The last Arrays (unknown amount, usually 2 per tx) are always changing block/tx-id
     */
-    for (const tx of txData) {
-      let txColumn = tx[1]
-      let txValue = tx[2]
-      let txAdd = tx[4]
-      if (txColumn == "block/tx-id") {
-        return}
-      if (txColumn == "block/tags" && txAdd && videoTagIds.has(txValue)) {
-        console.log("[yt-vid-info] user just set a YouTube video tag somewhere, will try to process video")
-        break}
+
+  /* Only schedule a processing of a video if we are certain the block has been tagged with one of the YouTube video tags,
+  and we are able to check that just with the txData alone, and then use the blocks Array to get their uuid
+  
+  */
+
+  const taggedBlocksUUID = []
+
+  for (const tx of txData) {
+    let blockId = tx[0]
+    let txColumn = tx[1]
+    let txValue = tx[2]
+    let txAdd = tx[4]
+
+    if (txColumn == "block/tx-id") {
+      // No more relevant transactions
+      break
     }
 
-    for (const b of blocks) {scheduleProcessing(b.uuid)}
+    if (txColumn == "block/tags" && txAdd && videoTagIds.has(txValue)) {
+      // User just set a YouTube video tag on some block, find its UUID
+      for (const b of blocks) {
+        if (b.id == blockId) {
+          taggedBlocksUUID.push(b.uuid)
+        }
+        
+      }
+    }
+  }
+  
+  if (taggedBlocksUUID.length > 0) {
+
+    console.log(`[yt-vid-info] user just set a YouTube video tag, processing ${taggedBlocksUUID.length} video/s`)
+
+    for (const uuid of taggedBlocksUUID) {
+      scheduleProcessing(uuid)
+    }      
+  }
   })
 
   logseq.beforeunload(async () => {

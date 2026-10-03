@@ -75,16 +75,6 @@ async function getTagChildIds(tagId: number): Promise<number[]> {
   return (await logseq.DB.datascriptQuery<number[]>(query)) || []
 }
 
-async function getBlockTagIds(blockUuid: string): Promise<number[]> {
-  const query = `
-    [:find [?tag ...]
-     :where
-     [?b :block/uuid #uuid "${blockUuid}"]
-     [?b :block/tags ?tag]]
-  `
-  return (await logseq.DB.datascriptQuery<number[]>(query)) || []
-}
-
 // Walks DOWN from the root video tag once, breadth-first, collecting every
 // descendant tag id (root included). Called only at startup. Updates the
 // exported `videoTagIds` cache in place and returns it.
@@ -116,12 +106,6 @@ export async function computeVideoTagIds(): Promise<Set<number>> {
 
   videoTagIds = ids
   return videoTagIds
-}
-
-export async function blockHasVideoTag(blockUuid: string): Promise<boolean> {
-  if (!videoTagIds.size) return false
-  const tagIds = await getBlockTagIds(blockUuid)
-  return tagIds.some((id) => videoTagIds.has(id))
 }
 
 export async function findAllVideoLikeBlocks(): Promise<BlockEntity[]> {
