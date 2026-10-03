@@ -3,6 +3,9 @@
  * this module only knows about YouTube.
  */
 
+import {consoleWarn } from './logging'
+
+
 const VIDEO_ID_RE = /(?:youtube\.com\/(?:watch\?v=|shorts\/)|youtu\.be\/)([\w-]{11})/
 const CANONICAL_CHANNEL_RE = /youtube\.com\/channel\/(UC[\w-]{22})/
 const HANDLE_RE = /youtube\.com\/@([\w.-]+)/i
@@ -45,7 +48,7 @@ export async function fetchOEmbed(
     )
     if (res.ok) result = await res.json()
   } catch (e) {
-    console.warn('[yt-vid-info] oEmbed lookup failed for', videoId, e)
+    consoleWarn('oEmbed lookup failed for', videoId, e)
   }
 
   oembedCache.set(videoId, result)
@@ -81,7 +84,7 @@ export async function resolveChannelId(url: string): Promise<string | null> {
       resolved = m ? m[1] : null
     }
   } catch (e) {
-    console.warn('[yt-vid-info] channel id resolution failed for', key.value, e)
+    consoleWarn('channel id resolution failed for', key.value, e)
   }
 
   sessionChannelIdCache.set(key.value, resolved)

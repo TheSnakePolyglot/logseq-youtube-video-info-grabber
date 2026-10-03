@@ -2,6 +2,8 @@ import type { BlockEntity } from '@logseq/libs/dist/LSPlugin'
 import { getSettings, CHANNEL_ID_PROP } from './settings'
 import { extractVideoId, extractChannelKey, fetchOEmbed, resolveChannelId } from './youtube'
 import { getProp } from './graph'
+import {consoleError, consoleLog } from './logging'
+
 
 /**
  * Matches a video's channel against saved #YoutubeChannel blocks, and
@@ -93,9 +95,9 @@ export async function processVideoBlock(block: BlockEntity): Promise<void> {
 
     await logseq.Editor.upsertBlockProperty(block.uuid, cfg.propertyKey, channelBlock.id)
     linkedThisSession.add(block.uuid)
-    console.log(`[yt-vid-info] linked to '${oembed.author_name}'`)
+    consoleLog(`linked to '${oembed.author_name}'`)
   } catch (e) {
-    console.error('[yt-vid-info] failed to process block', block.uuid, e)
+    consoleError('failed to process block', block.uuid, e)
   } finally {
     processing.delete(block.uuid)
   }

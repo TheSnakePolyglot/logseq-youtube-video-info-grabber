@@ -8,6 +8,7 @@ import {
   videoTagIds,
 } from './graph'
 import { processVideoBlock } from './linker'
+import {consoleLog, consoleWarn, consoleError } from './logging'
 
 /**
  * YouTube Video Info Grabber
@@ -110,8 +111,8 @@ async function withRetry<T>(
     } catch (e) {
       lastErr = e
       if (attempt > retries) break
-      console.warn(
-        `[yt-vid-info] setup attempt ${attempt} failed (graph may still be loading), retrying in ${delayMs}ms`,
+      consoleWarn(
+        `setup attempt ${attempt} failed (graph may still be loading), retrying in ${delayMs}ms`,
         e
       )
       await new Promise((r) => setTimeout(r, delayMs))
@@ -144,7 +145,7 @@ async function main(): Promise<void> {
       await computeVideoTagIds()
     })
   } catch (e) {
-    console.error('[yt-vid-info] setup failed after retries — graph may not be ready', e)
+    consoleError('setup failed after retries — graph may not be ready', e)
     await logseq.UI.showMsg(
       'YouTube Video Info Grabber failed to start — try reloading the plugin from the Plugins page.',
       'error'
@@ -221,7 +222,7 @@ async function main(): Promise<void> {
   
   if (taggedBlocksUUID.length > 0) {
 
-    console.log(`[yt-vid-info] user just set a YouTube video tag, processing ${taggedBlocksUUID.length} video/s`)
+    consoleLog(`user just set a YouTube video tag, processing ${taggedBlocksUUID.length} video/s`)
 
     for (const uuid of taggedBlocksUUID) {
       scheduleProcessing(uuid)
@@ -234,7 +235,7 @@ async function main(): Promise<void> {
     if (debounceTimer) clearTimeout(debounceTimer)
   })
 
-   console.info(`[yt-vid-info] finished loading plugin with the following tag ids for Youtube videos: ${Array.from(
+   consoleLog(`finished loading plugin with the following tag ids for Youtube videos: ${Array.from(
       videoTagIds
     ).join(', ')}`)
 
